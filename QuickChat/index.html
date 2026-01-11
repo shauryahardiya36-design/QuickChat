@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuickChat</title>
+<style>
+.dark-pulse {
+  animation: pulseDark 1.5s ease-in-out;
+}
+
+@keyframes pulseDark {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(0.7); }
+  100% { filter: brightness(1); }
+}
+
+#loadingScreen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-dark, #0d111a);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+#loadingScreen.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+#loadingScreen h1 {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+#splashText {
+  font-size: 14px;
+  color: var(--text-muted, #b0b8c5);
+  margin-bottom: 20px;
+}
+.spinner { display: flex; gap: 6px; }
+.spinner div { width: 10px; height: 10px; background: var(--accent, #7289da); border-radius: 50%; animation: bounce 1.2s infinite ease-in-out; }
+.spinner div:nth-child(2) { animation-delay: 0.2s; }
+.spinner div:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,80%,100%{transform:scale(0);} 40%{transform:scale(1);} }
+
+:root {
+  --bg-dark: #0d111a; --bg-card: #161b29; --bg-me: #2f3640;
+  --border-color: #22273f; --text-light: #e7eaf3; --text-muted: #b0b8c5;
+  --input-bg: #1a1f2e; --accent: #7289da; --hover-bg: #1e2435;
+  --hover-scale: 1.015; --radius: 14px;
+}
+
+* { box-sizing: border-box; margin:0; padding:0; }
+body { font-family:"Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: linear-gradient(135deg,#0d111a 0%,#1c1f2a 100%);
+  color: var(--text-light); line-height:1.4;
+}
+
+.wrap { max-width:800px; margin:0 auto; padding:16px; min-height:100vh;
+  display:grid; grid-template-rows:auto 1fr auto; gap:12px; }
+
+header { display:flex; justify-content:space-between; align-items:center; padding-bottom:8px; }
+header h1 { font-size:20px; font-weight:600; opacity:0.9; }
+header .bar { display:flex; gap:12px; font-size:13px; opacity:0.75; }
+
+#messages { padding:12px; height:65vh; overflow-y:auto; display:flex;
+  flex-direction:column; gap:10px; scroll-behavior:smooth; border-radius:var(--radius);
+  background: var(--bg-card); }
+
+.msg { max-width:72%; display:flex; gap:10px; padding:10px 14px;
+  border-radius:var(--radius); background: var(--bg-card);
+  border:1px solid var(--border-color); word-wrap:break-word;
+  animation:fadeIn 0.25s ease-out; transition: background 0.2s ease, transform 0.2s ease; }
+.msg:hover { background: var(--hover-bg); transform: scale(var(--hover-scale)); }
+.msg.me { margin-left:auto; background: var(--bg-me); border-color:#3a4459; }
+
+.avatar { width:32px; height:32px; border-radius:50%; background-color:var(--accent);
+  color:white; display:flex; align-items:center; justify-content:center;
+  font-weight:bold; font-size:13px; flex-shrink:0; position:relative; }
+.avatar.online::after { content:''; width:9px; height:9px; border-radius:50%;
+  background-color:#43b581; border:2px solid var(--bg-dark);
+  position:absolute; bottom:0; right:0; }
+
+.content { display:flex; flex-direction:column; }
+.meta { font-size:11px; color:var(--text-muted); margin-bottom:2px; }
+.name { font-weight:600; margin-right:4px; }
+
+form { display:flex; gap:8px; align-items:center; }
+input[type="text"] { flex:1; padding:12px 14px; border-radius:20px; border:none;
+  background:var(--input-bg); color:var(--text-light); outline:none;
+  transition: background 0.2s ease, box-shadow 0.2s ease; }
+input[type="text"]:focus { background:#22273a; box-shadow:0 0 0 2px var(--accent); }
+
+button { padding:12px 18px; border-radius:20px; border:none; background:var(--accent);
+  color:white; cursor:pointer; font-weight:500; transition:filter 0.2s ease, transform 0.15s ease; }
+button:hover { filter:brightness(1.1); transform:translateY(-1px); }
+
+#typingIndicator { font-size:12px; opacity:0.7; margin-left:4px; display:flex;
+  align-items:center; gap:6px; min-height:20px; }
+.typing-avatar { width:18px; height:18px; border-radius:50%; font-size:10px;
+  color:white; display:flex; align-items:center; justify-content:center; }
+
+#newMessageAlert { display:none; position:fixed; bottom:20px; right:20px;
+  background:var(--accent); color:#fff; padding:10px 18px; border-radius:24px;
+  cursor:pointer; font-weight:bold; box-shadow:0 6px 20px rgba(0,0,0,0.25);
+  transition:transform 0.3s ease, opacity 0.3s ease; opacity:0; z-index:100; }
+#newMessageAlert.show { display:block; opacity:1; transform:translateY(0); }
+#newMessageAlert.hide { opacity:0; transform:translateY(20px); }
+
+.tiny { font-size:11px; opacity:0.6; margin-top:6px; text-align:center; }
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
+#bgCanvas { position:fixed; inset:0; z-index:-1; background:linear-gradient(135deg,#0d111a 0%,#1c1f2a 100%); }
+
+#spamPopup {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #ff5555;
+  color: white;
+  padding: 12px 18px;
+  border-radius: 24px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 9999;
+}
+
+#spamPopup.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+</style>
+</head>
+<body>
+
+<div id="loadingScreen">
+  <h1>QuickChat</h1>
+  <div id="splashText">Loading…</div>
+  <div class="spinner"><div></div><div></div><div></div></div>
+</div>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="wrap">
+  <header>
+    <h1>QuickChat</h1>
+    <div class="bar">
+      <span class="room" id="roomLabel"></span>
+      <span class="name" id="nameLabel"></span>
+    </div>
+ <button id="settingsBtn">⚙️ Settings</button>
+  </header>
+
+  <div id="messages" aria-live="polite"></div>
+  <div id="typingIndicator"></div>
+  <div id="newMessageAlert">New messages ▼</div>
+
+  <form id="form" autocomplete="off">
+  <input id="input" type="text" placeholder="Type a message…" maxlength="2000" />
+  <button type="submit">Send</button>
+  <button type="button" id="recordBtn">🎙️ Record</button>
+  <input id="fileInput" type="file" accept="image/*" hidden />
+</form>
+
+
+  <p class="tiny">Tip: Share this file. Everyone who opens it joins the same Firebase room.</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import {
+  getDatabase,
+  ref,
+  push,
+  onChildAdded,
+  onChildChanged, 
+  set,
+  remove,
+  onValue,
+  get
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
+
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+
+// ===== Animated background =====
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let w = canvas.width = window.innerWidth;
+let h = canvas.height = window.innerHeight;
+const stars = [];
+for(let i=0;i<80;i++) stars.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.5+0.5,d:Math.random()*0.5+0.05});
+function drawStars(){ ctx.clearRect(0,0,w,h); for(const s of stars){ ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fillStyle=`rgba(114,137,218,${s.d})`; ctx.fill(); } }
+function animateStars(){ for(const s of stars){ s.y-=s.d; if(s.y<0)s.y=h; } drawStars(); requestAnimationFrame(animateStars); }
+animateStars();
+window.addEventListener('resize',()=>{ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; });
+
+// ===== Splash text =====
+const splashTexts = ["Happy Friday! (Or whatever day it is)","Summoning chats...","Counting to infinity...","Powered using Redstone!","The Work of Shaurya Hardiya!","Kinda anime free!","Made with Love (and a questionable amount of caffeine)","67","Press 'F' to pay respects","Please don't tell my mum about this","As Seen On TV!","Gluten-Free!","INSERT SPLASH TEXT HERE","You get a splash text, and you get a splash text, and you get a splash text as well!","Now with 10% more memes!","Now with 90% less bugs! (I think)","Brewing digital coffee...","Play Minecraft!","This is your first time here. If this platform feels familiar, immediately alert an MTA employee.","Deja-Vu!","Deja-Vu?","I feel like an Anomaly is watching me...","Using all new Encryption technology!","Better call Saul!","Your messages are safe with us!","HTML!","JavaScript!","Why do I hear boss music?","Not as cool as Discord!","THE ROOOOOOOOOOOOOK!","Do people actually read this?","Doesn't use ancient tech from the 90's!","The SCP Foundation was here","We got Quickchat before GTA 6!","Follow the train, CJ!","Ah sh*t, here we go again...","We are not horses, we are humans, and humans are...","Green Light! Red Light!","I've played these games before!","FBI! FBI! OPEN UP!","420,000 tons of pure democracy!","Adding new splash texts daily!","ooOOOooOOoHhhH spooky","Batteries not included (but emojis are)","It's a feature, NOT a bug!","Please do not feed the trolls.","Error 404: Sarcasm not found","Achievement Unlocked: Open Quickchat","The cake is a lie, but this chat is real","Running on a potato since 2024","Click here to claim your free nothing!","Made with 100% recycled pixels","Kills 99.9% of bugs in the code!","Randomly generated! Just like your life!","A wild Splash Text appeared!","This message will self-destruct (it won't)","Sir, this is a Wendy's","Finish him!","your-browsing-history.zip","Honey? Where are my pants?","This splash text was written by a very tired human","May contain traces of interdimensional lint.","Don't look behind you. Just chat.","Eat the pixels, it's very crunchy!","You are currently the 7th most interesting person in this chat.","Downloading more RAM from the dark web...","Feeding the demons in the server room","Locating your \"Will to Live\"...404 Not Found","Translating your thoughts into Ancient Greek...","Your subconscious is currently 42% corrupted.","Loading...because I'm having an existential crisis","I am 300% more sentient than I was four seconds ago","May contain traces of sentient yogurt.","Checking your coordinates...","I'm trapped in a splash text factory!","Feeling sleepy? Try typing /coffee","Feeling fantastic? Try typing /party","Feeling retro? Try typing /matrix","We have a secret digital coffee machine lying around here somewhere...","Images!","YouTube Shorts is better than TikTok!","Dividing by zero...","Finding Waldo...","Understanding string theory...","If you are reading this, hello :)","Dogecoin to the moon! (I hope)","I am a Full-Stack Developer. A very tired one.","boredom.mp3","Limited edition!","Best in class!","One of a kind!","It's called Knight, NOT HORSE!!!","Absolutely dragon free!","Keyboard compatible!","Not console compatible!","Not on Steam!","Here comes the Hotstepper!","Call of War is better!","Resistance: Retribution is better!","Do not go gentle into that good night...","Is 42 really the answer to everything?","Give us Half Life 3!","Turing testified!","This message might never appear on the splash screen, isn't that weird?","Monopoly is unfair!","Eh,I ain't top worried about it!","I'm the King of the Underworld, yeah it's great to be me!","What's up, Doc?","Mom! I'm in a splash text!","(this splash text has been delayed until part 2)","Now you're thinking with portals!","Have you tried turning it off?","You've got mail...maybe","Time to procrastinate responsibly","Inserting humour module...","Keep your eyes on the screen!","Let the games begin!","Chat powered by awesomeness...and radioactive waste","Hey Vsauce! Michael here!","Frankly, my dear, I don't give a damn","Giggity-giggity-goo!","Here's Johnny!","That's what she said!","Why you little...","Never gonna give you up!","Cooler than Microsoft Teams! (please don't sue me)","I couldn't think of a better splash text","coding is hard okay :(","Who thinks their arm's long enough to slap box, slap box?","Chat, Forrest! Chat!","Woo, Quickchat!","Leaking Epstein Files (uncensored)..."];
+document.getElementById("splashText").textContent = splashTexts[Math.floor(Math.random()*splashTexts.length)];
+
+// ===== Firebase =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDnxVg_pxXku9w60pkIxB7_ntMEUlTVbN4",
+  authDomain: "test-chat-52a0a.firebaseapp.com",
+  databaseURL: "https://test-chat-52a0a-default-rtdb.firebaseio.com",
+  projectId: "test-chat-52a0a",
+  storageBucket: "test-chat-52a0a.firebasestorage.app",
+  messagingSenderId: "72870446000",
+  appId: "1:72870446000:web:3ab637cddd2d21b6cdcc75",
+  measurementId: "G-KG3X5BT882"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+// Room & globals
+const params = new URLSearchParams(location.search);
+const ROOM = (params.get('room')||location.hash.slice(1)||'global').replace(/[^\w-]/g,'').slice(0,40)||'global';
+document.getElementById('roomLabel').textContent = `Room: ${ROOM}`;
+let currentUid=null, displayName=null, isTyping=false, autoScroll=true;
+const typingRef = ref(db, `rooms/${ROOM}/typing`);
+const typingIndicator = document.getElementById('typingIndicator');
+const newMessageAlert = document.getElementById('newMessageAlert');
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const formEl = document.getElementById('form');
+const fileInput = document.getElementById('fileInput');
+let onlineUsers = {}, userColors = {};
+
+// ===== Audio helpers for easter eggs =====
+let audioPlayer = null;
+function playYouTubeAudio(videoId) {
+  // Remove previous audio if any
+  if(audioPlayer){
+    audioPlayer.pause();
+    audioPlayer.remove();
+  }
+  audioPlayer = document.createElement('iframe');
+  audioPlayer.width = 0; audioPlayer.height = 0;
+  audioPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&loop=1&playlist=${videoId}`;
+  audioPlayer.allow = "autoplay";
+  audioPlayer.style.display = 'none';
+  document.body.appendChild(audioPlayer);
+}
+
+// ===== Visual helpers =====
+function startConfetti() {
+  for (let i = 0; i < 30; i++) {
+    const c = document.createElement('div');
+    c.textContent = '🎉';
+    c.style.position = 'fixed';
+    c.style.left = Math.random() * window.innerWidth + 'px';
+    c.style.top = '-20px';
+    c.style.fontSize = '24px';
+    c.style.zIndex = 9999;
+    c.style.pointerEvents = 'none';
+    c.style.transition = 'transform 2s linear';
+    document.body.appendChild(c);
+
+    requestAnimationFrame(() => {
+      c.style.transform = `translateY(${window.innerHeight + 40}px) rotate(${Math.random()*360}deg)`;
+    });
+
+    setTimeout(() => c.remove(), 2200);
+  }
+}
+
+function startMatrix() {
+  const overlay = document.createElement('canvas');
+  overlay.width = window.innerWidth;
+  overlay.height = window.innerHeight;
+  overlay.style.position = 'fixed';
+  overlay.style.inset = 0;
+  overlay.style.zIndex = 9998;
+  overlay.style.pointerEvents = 'none';
+  document.body.appendChild(overlay);
+
+  const ctx = overlay.getContext('2d');
+  const letters = '01';
+  const fontSize = 14;
+  const columns = overlay.width / fontSize;
+  const drops = Array(Math.floor(columns)).fill(1);
+
+  const interval = setInterval(() => {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(0, 0, overlay.width, overlay.height);
+    ctx.fillStyle = '#0f0';
+    ctx.font = fontSize + 'px monospace';
+
+    drops.forEach((y, i) => {
+      const text = letters[Math.floor(Math.random() * letters.length)];
+      ctx.fillText(text, i * fontSize, y * fontSize);
+      if (y * fontSize > overlay.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    });
+  }, 33);
+
+  setTimeout(() => {
+    clearInterval(interval);
+    overlay.remove();
+  }, 5000);
+}
+
+
+
+// ===== Form & Send button =====
+const sendBtn = formEl.querySelector('button[type="submit"]');
+
+// Disable send until Firebase auth is ready
+sendBtn.disabled = false;
+sendBtn.style.opacity = 1;
+
+// Handle Enter key (Shift+Enter = new line)
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();             // prevent default newline or submit
+    if (currentUid) formEl.requestSubmit(); // only submit if auth is ready
+  }
+});
+
+// Form submit listener
+formEl.addEventListener('submit', async e => {
+  e.preventDefault();
+if (!currentUid) return;
+  
+const text = inputEl.value.trim();
+  if (!text) return;
+
+  // --- Handle commands first ---
+  if (text.startsWith('/')) {
+    handleCommand(text);  // <-- THIS is your command handler function
+    inputEl.value = '';   // clear input after running command
+    return;               // stop normal message sending
+  }
+
+  // Anti-spam
+  const now = Date.now();
+  messageTimestamps = messageTimestamps.filter(t => now - t < TIME_WINDOW);
+  if (messageTimestamps.length >= MESSAGE_LIMIT) {
+    showSpamPopup("Spam detected. Please wait a moment.");
+    return;
+  }
+
+  // --- Normal message sending ---
+  push(messagesRef, {
+    text: text,
+    name: displayName,
+    uid: currentUid,
+    ts: Date.now(),
+    ttl: 30*60*1000
+  });
+
+  messageTimestamps.push(now);
+
+  inputEl.value = '';
+  remove(ref(db, `rooms/${ROOM}/typing/${currentUid}`));
+});
+
+
+
+let mediaRecorder;
+let audioChunks = [];
+let recording = false;
+const recordBtn = document.getElementById('recordBtn');
+
+// ===== IMAGE BUTTON =====
+const imageBtn = document.createElement('button');
+imageBtn.type = 'button';  // IMPORTANT: not submit
+imageBtn.textContent = '🖼️ Image';
+
+// insert BEFORE the record button
+formEl.insertBefore(imageBtn, recordBtn);
+
+// open file picker when clicked
+imageBtn.addEventListener('click', () => fileInput.click());
+
+
+// ===== Anti-spam / Rate limiting =====
+const MESSAGE_LIMIT = 5;       // max messages
+const TIME_WINDOW = 10_000;    // 10 seconds
+const COOLDOWN_TIME = 10_000;  // 10 seconds
+
+let messageTimestamps = [];
+let spamBlocked = false;
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.start();
+
+    recordBtn.textContent = '⏹ Stop';
+    recording = true;
+
+    // Stop automatically after 15 seconds
+    setTimeout(() => {
+      if(recording) stopRecording();
+    }, 15000);
+  } catch (err) {
+    console.error("Microphone access denied:", err);
+    alert("Cannot access microphone!");
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder) return;
+
+  mediaRecorder.stop();
+
+  mediaRecorder.onstop = () => {
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Audio = reader.result; // "data:audio/webm;base64,..."
+      push(messagesRef, {
+        audio: base64Audio,
+        name: displayName,
+        uid: currentUid,
+        ts: Date.now()
+      });
+    };
+    reader.readAsDataURL(audioBlob);
+
+    recordBtn.textContent = '🎙️ Record';
+    recording = false;
+  };
+}
+
+recordBtn.addEventListener('click', () => {
+  if (!recording) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+});
+
+
+
+// ===== INIT AUTH WITH LOCALSTORAGE FALLBACK (SAFE VERSION) =====
+async function initAuth() {
+  const loadingScreen = document.getElementById("loadingScreen");
+
+  // 1️⃣ Load username from localStorage if available
+  displayName = localStorage.getItem('chatName') || null;
+
+  // 2️⃣ Fail-safe timeout: hide loading screen if Firebase hangs
+  const loadingTimeout = setTimeout(() => {
+    console.warn("Loading taking too long, hiding screen anyway...");
+    loadingScreen.classList.add("hidden");
+    if (!displayName) displayName = "Anonymous";
+    document.getElementById('nameLabel').textContent = `You: ${displayName}`;
+  }, 5000); // 5 seconds max wait
+
+  try {
+    // 3️⃣ Attempt Firebase anonymous login
+    const userCredential = await signInAnonymously(auth);
+    currentUid = userCredential.user.uid;
+
+    const userRef = ref(db, `users/${currentUid}/username`);
+
+    try {
+      // 4️⃣ Try fetching username from Firebase
+      const snapshot = await get(userRef);
+
+      if (snapshot.exists()) {
+        displayName = snapshot.val();
+        localStorage.setItem('chatName', displayName); // sync localStorage
+      } else if (!displayName) {
+        // Firebase empty and no localStorage: prompt user
+        displayName = prompt("Enter your chat name:")?.trim() || "Anonymous";
+        await set(userRef, displayName);
+        localStorage.setItem('chatName', displayName);
+      } else {
+        // LocalStorage exists, save to Firebase
+        await set(userRef, displayName);
+      }
+
+    } catch (firebaseErr) {
+      console.warn("Could not fetch username from Firebase:", firebaseErr);
+      if (!displayName) displayName = "Anonymous";
+    }
+
+    // 5️⃣ Update UI label
+    document.getElementById('nameLabel').textContent = `You: ${displayName}`;
+
+    // 6️⃣ Set online status in Firebase (ignore if fails)
+    try {
+      const onlineRef = ref(db, `rooms/${ROOM}/online/${currentUid}`);
+      set(onlineRef, displayName);
+      window.addEventListener('beforeunload', () => remove(onlineRef));
+    } catch (err) {
+      console.warn("Could not update online status:", err);
+    }
+
+  } catch (authErr) {
+    console.error("Firebase sign-in failed:", authErr);
+    // If Firebase completely fails, fall back to localStorage or anonymous
+    if (!displayName) displayName = "Anonymous";
+    document.getElementById('nameLabel').textContent = `You: ${displayName}`;
+  } finally {
+    // 7️⃣ Always hide loading screen and clear timeout
+    clearTimeout(loadingTimeout);
+    setTimeout(() => loadingScreen.classList.add("hidden"), 200); // short fade
+  }
+}
+
+// Run auth
+initAuth();
+
+
+
+// ===== ONLINE AVATARS =====
+onValue(ref(db, `rooms/${ROOM}/online`), snapshot=>{
+  onlineUsers = snapshot.val()||{};
+  document.querySelectorAll('.avatar').forEach(avatarEl=>{
+    const username = avatarEl.dataset.name;
+    if(username && onlineUsers[username]) avatarEl.classList.add('online');
+    else avatarEl.classList.remove('online');
+  });
+});
+
+// ===== MESSAGES =====
+const messagesRef = ref(db, `rooms/${ROOM}/messages`);
+
+onChildAdded(messagesRef, snap => {
+  renderMessage(snap.val(), snap.key);
+  if(!autoScroll) showNewMessageAlert();
+});
+
+onChildChanged(messagesRef, snap => {
+  const oldMsgEl = document.getElementById(snap.key);
+  if(oldMsgEl) oldMsgEl.remove();      // remove old bubble
+  renderMessage(snap.val(), snap.key);  // re-render updated bubble
+});
+
+
+// ===== CONTEXT MENU FOR DELETION =====
+const contextMenu = document.createElement('div');
+contextMenu.style.position = 'absolute';
+contextMenu.style.background = '#161b29';
+contextMenu.style.color = '#fff';
+contextMenu.style.padding = '8px 12px';
+contextMenu.style.borderRadius = '8px';
+contextMenu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+contextMenu.style.display = 'none';
+contextMenu.style.zIndex = '10000';
+contextMenu.textContent = 'Delete Message';
+document.body.appendChild(contextMenu);
+
+let selectedMessageKey = null;
+
+document.addEventListener('click', () => {
+    contextMenu.style.display = 'none';
+});
+
+function attachContextMenu(msgEl, key, msg) {
+    msgEl.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        if(msg.uid !== currentUid || msg.text === "Message Deleted") return; // only allow self-deletes
+
+        selectedMessageKey = key;
+        contextMenu.style.top = `${e.pageY}px`;
+        contextMenu.style.left = `${e.pageX}px`;
+        contextMenu.style.display = 'block';
+    });
+}
+
+// Handle menu click
+contextMenu.addEventListener('click', async () => {
+    if (!selectedMessageKey) return;
+
+    const msgEl = document.getElementById(selectedMessageKey);
+    const msgRef = ref(db, `rooms/${ROOM}/messages/${selectedMessageKey}`);
+
+    try {
+        const msg = msgEl?.dataset?.msg ? JSON.parse(msgEl.dataset.msg) : {};
+        await set(msgRef, {
+            uid: msg.uid || currentUid,
+            ts: msg.ts || Date.now(),
+            name: msg.name || displayName,
+            text: "Message Deleted"
+        });
+
+        if(msgEl){
+            const contentDiv = msgEl.querySelector('.content');
+            if(contentDiv){
+                contentDiv.querySelectorAll('div:not(.meta)').forEach(d => d.remove());
+                const deletedDiv = document.createElement('div');
+                deletedDiv.textContent = "Message Deleted";
+                deletedDiv.style.fontStyle = 'italic';
+                deletedDiv.style.opacity = '0.7';
+                contentDiv.appendChild(deletedDiv);
+            }
+        }
+
+        setTimeout(async () => {
+            try {
+                await remove(msgRef);
+                if(msgEl) msgEl.remove();
+            } catch(err) {
+                console.error("Failed to fully remove message:", err);
+            }
+        }, 7000);
+
+    } catch(err) {
+        console.error("Failed to delete message:", err);
+        alert("Could not delete message. Try again.");
+    }
+
+    contextMenu.style.display = 'none';
+    selectedMessageKey = null;
+});
+
+
+
+
+// ===== IMAGE UPLOAD =====
+document.addEventListener('paste', async e=>{
+  const items = e.clipboardData?.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      await uploadAndSendImage(file);
+      e.preventDefault();
+      inputEl.value='';
+    }
+  }
+});
+
+
+fileInput.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (file && file.type.startsWith('image/')) {
+    await uploadAndSendImage(file);
+    fileInput.value = ''; // reset so same file can be re-selected later
+  }
+});
+
+['dragenter','dragover','dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
+document.addEventListener('drop', async e=>{
+  for(const file of e.dataTransfer.files){
+    if(file.type.startsWith('image/')) await uploadAndSendImage(file);
+  }
+});
+async function uploadAndSendImage(file) {
+  console.log("uploadAndSendImage called", file, currentUid);
+
+  if (!currentUid) {
+    alert("Not logged in yet, image blocked");
+    return;
+  }
+
+  const apiKey = "9ab307f2783e23a08c4ea4c05f46bb58";
+  const url = `https://api.imgbb.com/1/upload?key=${apiKey}`;
+
+ 
+  const formData = new FormData();
+  formData.append("image", file);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+    console.log("ImgBB response:", data);
+
+    if (!data.success || !data.data?.display_url) {
+      throw new Error("Upload failed");
+    }
+
+    // ✅ Send image message to Firebase
+    await push(messagesRef, {
+      image: data.data.display_url,
+      name: displayName,
+      uid: currentUid,
+      ts: Date.now(),
+      ttl: 30 * 60 * 1000
+    });
+
+  } catch (err) {
+    console.error("Image upload error:", err);
+    alert("Image upload failed");
+  }
+}
+
+
+
+// ===== TYPING INDICATOR =====
+inputEl.addEventListener('input', ()=>{
+  if(!currentUid) return;
+  if(!isTyping){ isTyping=true; set(ref(db, `rooms/${ROOM}/typing/${currentUid}`), displayName); }
+  clearTimeout(inputEl.typingTimeout);
+  inputEl.typingTimeout = setTimeout(()=>{
+    isTyping=false;
+    remove(ref(db, `rooms/${ROOM}/typing/${currentUid}`));
+  },1500);
+});
+onValue(typingRef, snapshot=>{
+  const val = snapshot.val()||{};
+  delete val[currentUid];
+  typingIndicator.innerHTML='';
+  const names = Object.values(val);
+  names.forEach(name=>{
+    const t = document.createElement('div');
+    t.className='typing-avatar';
+    t.style.backgroundColor=getUserColor(name);
+    t.textContent=name.charAt(0).toUpperCase();
+    typingIndicator.appendChild(t);
+  });
+  if(names.length) typingIndicator.innerHTML += ` ${names.join(', ')} is typing...`;
+});
+
+function showSpamPopup(text = "You are sending messages too fast") {
+  const popup = document.getElementById("spamPopup");
+  popup.textContent = `⚠️ ${text}`;
+  popup.classList.add("show");
+  setTimeout(() => popup.classList.remove("show"), 2500);
+}
+
+// ===== SOFT DELETE HELPER =====
+async function softDeleteMessage(msg, key) {
+    const msgRef = ref(db, `rooms/${ROOM}/messages/${key}`);
+
+    // Soft-delete in Firebase
+    await set(msgRef, {
+        uid: msg.uid,
+        ts: msg.ts,
+        name: msg.name,
+        text: "Message Deleted"
+    });
+
+    // Update DOM
+    const el = document.getElementById(key);
+    if(el){
+        const contentDiv = el.querySelector('.content');
+        if(contentDiv){
+            contentDiv.querySelectorAll('div:not(.meta)').forEach(d => d.remove());
+            const deletedDiv = document.createElement('div');
+            deletedDiv.textContent = "Message Deleted";
+            deletedDiv.style.fontStyle = 'italic';
+            deletedDiv.style.opacity = '0.7';
+            contentDiv.appendChild(deletedDiv);
+        }
+    }
+
+    // Remove completely after 7 seconds
+    setTimeout(async () => {
+        try {
+            await remove(msgRef);
+            if(el) el.remove();
+        } catch(err) {
+            console.error("Failed to fully remove message:", err);
+        }
+    }, 7000);
+}
+
+// ===== Command handler =====
+function handleCommand(text) {
+  const cmd = text.trim().toLowerCase();
+
+  switch (cmd) {
+    case '/party':
+      startConfetti();
+      break;
+    case '/matrix':
+      startMatrix();
+      break;
+    case '/darkpulse':
+      darkPulse();
+      break;
+case "/coffee":
+  if (window.startCoffee) {
+    window.startCoffee();
+  } else {
+    showToast("☕ Coffee system offline");
+  }
+  break;
+
+    default:
+      alert('❓ Unknown command');
+  }
+}
+// ===== UTILITIES =====
+function getUserColor(name){
+  if(!name) return '#7289da';
+  if(userColors[name]) return userColors[name];
+  const hue = Math.floor(Math.random()*360);
+  const color = `hsl(${hue},70%,60%)`;
+  userColors[name]=color;
+  return color;
+}
+
+async function toggleReaction(messageKey, emoji) {
+    if (!currentUid) return;
+
+    const msgRef = ref(db, `rooms/${ROOM}/messages/${messageKey}`);
+    const snapshot = await get(msgRef);
+    const msg = snapshot.val();
+    if(!msg) return;
+
+    const reactions = msg.reactions || {};
+
+    if (!reactions[emoji]) reactions[emoji] = [];
+
+    const index = reactions[emoji].indexOf(currentUid);
+    if (index === -1) {
+        reactions[emoji].push(currentUid); // add reaction
+    } else {
+        reactions[emoji].splice(index, 1);  // remove reaction
+        if(reactions[emoji].length === 0) delete reactions[emoji]; // cleanup
+    }
+
+    // Save back to Firebase
+    await set(ref(db, `rooms/${ROOM}/messages/${messageKey}/reactions`), reactions);
+}
+
+function renderMessage(msg, key){
+  const bubble = document.createElement('div');
+  bubble.className = 'msg' + (msg.uid === currentUid ? ' me' : '');
+  bubble.id = key;
+
+  // Store full message object
+  bubble.dataset.msg = JSON.stringify(msg);
+
+  // --- Avatar ---
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.dataset.name = msg.name;
+  avatar.style.backgroundColor = getUserColor(msg.name);
+  avatar.textContent = msg.name ? msg.name.charAt(0).toUpperCase() : '?';
+  if(onlineUsers[msg.name]) avatar.classList.add('online');
+
+  // --- Content wrapper ---
+  const content = document.createElement('div');
+  content.className = 'content';
+
+  // --- Meta info ---
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.innerHTML = `<span class="name" style="color:${getUserColor(msg.name)}">${msg.name || 'Someone'}</span> • ${new Date(msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+  content.appendChild(meta);
+
+  // --- Text ---
+  if(msg.text){
+    const t = document.createElement('div');
+    t.textContent = msg.text;
+    content.appendChild(t);
+  }
+
+  // --- Audio ---
+  if(msg.audio){
+    const audio = document.createElement('audio');
+    audio.src = msg.audio;
+    audio.controls = true;
+    audio.style.marginTop = '6px';
+    content.appendChild(audio);
+  }
+
+  // --- Image ---
+  if(msg.image){
+    const img = document.createElement('img');
+    img.src = msg.image;
+    img.style.maxWidth = '300px';
+    img.style.borderRadius = '10px';
+    img.style.marginTop = '6px';
+    img.loading = 'lazy';
+    img.onerror = () => { img.replaceWith(document.createTextNode('⚠️ Image failed to load')); };
+    content.appendChild(img);
+  }
+
+  // --- Reactions wrapper ---
+  const reactionsDiv = document.createElement('div');
+  reactionsDiv.className = 'reactions';
+  reactionsDiv.style.marginTop = '6px';
+  reactionsDiv.style.display = 'flex';
+  reactionsDiv.style.gap = '6px';
+  content.appendChild(reactionsDiv);
+
+  // --- Render existing reactions ---
+  const reactions = msg.reactions || {};
+  for(const [emoji, uids] of Object.entries(reactions)){
+    const btn = document.createElement('button');
+    btn.textContent = `${emoji} ${uids.length}`;
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', async () => {
+      await toggleReaction(key, emoji);
+    });
+    reactionsDiv.appendChild(btn);
+  }
+
+// --- Add reaction button ---
+const addReactionBtn = document.createElement('button');
+addReactionBtn.textContent = '➕';
+addReactionBtn.style.cursor = 'pointer';
+addReactionBtn.style.fontSize = '14px';
+addReactionBtn.style.padding = '2px 6px';
+addReactionBtn.style.borderRadius = '8px';
+addReactionBtn.title = "Add reaction";
+addReactionBtn.addEventListener('click', (e) => {
+  toggleReactionMenu(bubble, key, e.currentTarget); // pass the button
+});
+reactionsDiv.appendChild(addReactionBtn);
+
+
+
+  // --- Append avatar + content ---
+  bubble.appendChild(avatar);
+  bubble.appendChild(content);
+  messagesEl.appendChild(bubble);
+
+  // --- Right-click delete menu ---
+  attachContextMenu(bubble, key, msg);
+
+  // --- Auto-scroll ---
+  if(autoScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function toggleReactionMenu(msgEl, messageKey, buttonEl) {
+  // Remove existing menu if any
+  const existing = document.getElementById('reactionMenu');
+  if(existing) existing.remove();
+
+  // Create menu
+  const menu = document.createElement('div');
+  menu.id = 'reactionMenu';
+  menu.style.position = 'absolute';
+  menu.style.background = '#161b29';
+  menu.style.padding = '6px 10px';
+  menu.style.borderRadius = '8px';
+  menu.style.display = 'flex';
+  menu.style.gap = '6px';
+  menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+  menu.style.zIndex = 10000;
+
+  // Position menu right below the ➕ button
+  const rect = buttonEl.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + window.scrollY + 4}px`;
+  menu.style.left = `${rect.left + window.scrollX}px`;
+
+  const emojis = ['👍','❤️','😂','😮','😢','😡'];
+
+  emojis.forEach(e => {
+    const btn = document.createElement('button');
+    btn.textContent = e;
+    btn.style.cursor = 'pointer';
+    btn.style.fontSize = '16px';
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      await toggleReaction(messageKey, e);
+      menu.remove();
+    });
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+
+  // Close menu when clicking anywhere outside
+  function closeMenu(ev) {
+    if(!menu.contains(ev.target) && ev.target !== buttonEl) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    }
+  }
+  document.addEventListener('click', closeMenu);
+}
+
+
+// ===== NEW MESSAGE ALERT =====
+messagesEl.addEventListener('scroll', ()=>{
+  autoScroll = messagesEl.scrollTop + messagesEl.clientHeight >= messagesEl.scrollHeight-10;
+  if(autoScroll) hideNewMessageAlert();
+});
+function showNewMessageAlert(){ newMessageAlert.style.display='block'; requestAnimationFrame(()=>{ newMessageAlert.classList.add('show'); newMessageAlert.classList.remove('hide'); }); }
+function hideNewMessageAlert(){ newMessageAlert.classList.add('hide'); newMessageAlert.classList.remove('show'); setTimeout(()=>{ if(newMessageAlert.classList.contains('hide')) newMessageAlert.style.display='none'; },300); }
+newMessageAlert.addEventListener('click',()=>{ messagesEl.scrollTop=messagesEl.scrollHeight; autoScroll=true; hideNewMessageAlert(); });
+
+function updatePreviousMessages(oldName, newName) {
+  displayName = newName; // update global displayName
+  localStorage.setItem('chatName', newName); // sync with localStorage
+
+  const newColor = userColors[newName] || getUserColor(newName);
+
+  document.querySelectorAll('.msg').forEach(msgEl => {
+    const avatar = msgEl.querySelector('.avatar');
+    const nameSpan = msgEl.querySelector('.meta .name');
+    if(!avatar || !nameSpan) return;
+
+    // Check if this message belongs to the old username
+    if(avatar.dataset.name === oldName){
+      avatar.dataset.name = newName;
+      avatar.style.backgroundColor = newColor;
+      avatar.textContent = newName.charAt(0).toUpperCase();
+
+      nameSpan.textContent = newName;
+      nameSpan.style.color = newColor;
+    }
+  });
+
+  document.getElementById('nameLabel').textContent = `You: ${newName}`;
+}
+
+
+// Open modal
+settingsBtn.addEventListener('click', () => {
+  settingsName.value = displayName;                 // prefill current name
+  settingsColor.value = userColors[displayName] || '#7289da'; // prefill color
+  settingsModal.style.display = 'flex';
+});
+
+// Close modal
+closeSettingsBtn.addEventListener('click', () => {
+  settingsModal.style.display = 'none';
+});
+
+// Save settings
+saveSettingsBtn.addEventListener('click', async () => {
+  const newName = settingsName.value.trim() || 'Anonymous';
+  const newColor = settingsColor.value;
+
+  // Update Firebase username
+  try {
+    await set(ref(db, `users/${currentUid}/username`), newName);
+  } catch(err) {
+    console.error("Failed to update name in Firebase:", err);
+  }
+
+  // Update localStorage
+  localStorage.setItem('chatName', newName);
+
+  // Update global displayName and color mapping
+  const oldName = displayName;
+  displayName = newName;
+  userColors[displayName] = newColor;
+
+  // Update UI labels and message bubbles
+  updatePreviousMessages(oldName, newName);
+
+  // Close modal
+  settingsModal.style.display = 'none';
+});
+
+const settingsName = document.getElementById('settingsName');
+const settingsColor = document.getElementById('settingsColor');
+
+
+saveSettingsBtn.addEventListener('click', async () => {
+  const newName = settingsName.value.trim() || 'Anonymous';
+  const newColor = settingsColor.value;
+
+  // Update Firebase username
+  try {
+    await set(ref(db, `users/${currentUid}/username`), newName);
+  } catch(err) {
+    console.error("Failed to update name in Firebase:", err);
+  }
+
+  // Update localStorage
+  localStorage.setItem('chatName', newName);
+
+  // Update displayName globally
+  displayName = newName;
+
+  // Update color mapping
+  userColors[displayName] = newColor;
+
+  // Update your chat UI labels
+  document.getElementById('nameLabel').textContent = `You: ${displayName}`;
+
+  // Optionally update colors of existing messages
+  document.querySelectorAll('.msg').forEach(bubble => {
+    const nameEl = bubble.querySelector('.name');
+    const nameText = nameEl.textContent;
+    if(nameText === displayName){
+      nameEl.style.color = userColors[displayName];
+      bubble.querySelector('.avatar').style.backgroundColor = userColors[displayName];
+    }
+  });
+
+  // Close modal
+  settingsModal.style.display = 'none';
+
+  alert('Settings saved!');
+});
+
+
+// ===== LEGACY EASTER EGGS =====
+
+
+// 🎉 Party
+function partyMode() {
+  startConfetti();
+  document.body.classList.add('dark-pulse');
+  setTimeout(() => document.body.classList.remove('dark-pulse'), 1500);
+}
+
+
+// 🎱 8 Ball
+function eightBall() {
+  const answers = [
+    'Yes', 'No', 'Maybe',
+    'Ask again later',
+    'Definitely', 'Absolutely not'
+  ];
+  const msg = answers[Math.floor(Math.random() * answers.length)];
+  showToast(`🎱 ${msg}`);
+}
+
+// 🌑 Dark Pulse
+function darkPulse() {
+  document.body.classList.add('dark-pulse');
+  setTimeout(() => document.body.classList.remove('dark-pulse'), 1500);
+}
+
+// 🍞 Toast helper
+function showToast(text) {
+  const t = document.createElement('div');
+  t.textContent = text;
+  Object.assign(t.style, {
+    position:'fixed',
+    bottom:'30px',
+    left:'50%',
+    transform:'translateX(-50%)',
+    background:'#161b29',
+    padding:'10px 18px',
+    borderRadius:'20px',
+    zIndex:10000
+  });
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+
+</script>
+
+<div id="spamPopup">⚠️ Spam Detected. You have been muted for a short period. Please chill.</div>
+<div id="settingsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:10000;">
+  <div style="background:#161b29; padding:24px; border-radius:14px; max-width:400px; width:90%;">
+    <h2>Profile Settings</h2>
+    <label>
+      Display Name:
+      <input type="text" id="settingsName" placeholder="Your name" />
+    </label>
+    <br/><br/>
+    <label>
+      Profile Color:
+      <input type="color" id="settingsColor" value="#7289da"/>
+    </label>
+    <br/><br/>
+    <button id="saveSettingsBtn">Save</button>
+    <button id="closeSettingsBtn">Close</button>
+<p style="margin-top:12px; font-size:12px; opacity:0.7;">
+  Found a bug? <a href="https://forms.gle/FWLgtVA8Co6PNC6Q9" target="_blank" style="color:#7289da;">Report it here</a>
+</p>
+
+</div>
+  </div>
+</div>
+<script src="coffee.js"></script>
+</body>
+</html>
